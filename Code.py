@@ -1,3 +1,5 @@
+import pandas as pd
+
 geo= pd.read_csv("DATASETS/01.geo.csv",encoding='cp1252',sep=";")
 custom= pd.read_csv("DATASETS/02.customers.csv",encoding='cp1252',sep=";")
 sel= pd.read_csv("DATASETS/03.sellers.csv",encoding='cp1252',sep=";")
