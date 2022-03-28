@@ -31,3 +31,9 @@ prod[["product_photo_quantity","product_width_cm","product_height_cm",
                                                         "product_width_cm","product_height_cm","product_length_cm",
                                                         "product_weight_gr"]].replace(np.nan, median(prod[["product_photo_quantity","product_width_cm","product_height_cm","product_length_cm","product_weight_gr"]]))
                                                                    
+import plotly.express as px
+fig = px.scatter_mapbox(geo, lat="geo_latitude", lon="geo_longitude", hover_name="geo_city", hover_data=["geo_autonomous_community", "geo_admin1_code"],color_discrete_sequence=["fuchsia"], zoom=3, height=300)
+fig.update_layout(mapbox_style="open-street-map")
+fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+fig.show()
+fig.write_html("Geo_map.html")
