@@ -1,8 +1,8 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[29]:
-
+"""
+Machine Learning techniques to increase profitability. 
+NTTData x Luiss
+Martina Manno, Martina Crisafulli, Olimpia Sannucci, Hanna Carucci Viterbi, Tomas Ryen
+"""
 
 # Import libraries
 import numpy as np
@@ -19,22 +19,9 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 import squarify
 
-
-# In[5]:
-
-
 # Load the dataset, corresponding to the final of the clustering script
 df = pd.read_csv("python_merged.csv", index_col=0)
-
-
-# In[6]:
-
-
 df.dropna(inplace=True)
-
-
-# In[7]:
-
 
 # Data cleaning and management
 products_bought = df.groupby(['customer_unique_id']).agg({'order_item_sequence_id':'sum',
@@ -43,10 +30,6 @@ products_bought = df.groupby(['customer_unique_id']).agg({'order_item_sequence_i
                                                           'shipping_cost':'sum', 'review_score':'mean', 
                                                           'ts_order_purchase':'max', 'order_id':'count'}).reset_index()
 all_data = products_bought.sort_values(by = ['product_category_name'], ascending=False)
-
-
-# In[10]:
-
 
 # Data cleaning and addition of recency and frequency to the dataset 
 all_data = all_data.rename(columns={"product_category_name": "amount_prod_categories"})
@@ -57,16 +40,6 @@ all_data['recency'] = all_data['recency'].dt.days
 all_data.drop(['ts_order_purchase','today'], inplace= True, axis=1)
 all_data = all_data.rename(columns={"order_id": "frequency"})
 
-
-# In[61]:
-
-
-#all_data.to_csv('rfm.csv')
-
-
-# In[11]:
-
-
 # Plotting Recency
 plt.figure(figsize=(18, 4))
 sns.distplot(all_data['recency'])
@@ -74,10 +47,6 @@ sns.distplot(all_data['recency'])
 plt.xlabel('Days since the last order')
 plt.title('Recency',fontsize=16);
 plt.show()
-
-
-# In[12]:
-
 
 # Plotting Frequency
 plt.figure(figsize=(15, 3))
@@ -88,10 +57,6 @@ plt.title('Frequency',fontsize=16);
 plt.show()
 print(all_data['frequency'].value_counts())
 
-
-# In[13]:
-
-
 # Plotting Monetary
 plt.figure(figsize=(15, 3))
 sns.distplot(all_data['transaction_value']);
@@ -100,26 +65,14 @@ plt.xlabel('Total purchase value')
 plt.title('Monetary', fontsize=16);
 plt.show()
 
-
-# In[14]:
-
-
 # Compute ratings for each product category
 rating_count = (df.groupby(by = ['product_category_name'])['review_score'].mean().reset_index().rename(columns = {'review_score':'review_count'})[['product_category_name','review_count']])
-
-
-# In[17]:
-
 
 # sort products by review, from highest to lowest
 product_rew = rating_count.sort_values(by=['review_count'], ascending=False)
 best_products = product_rew[:10]
 best_products = best_products[['product_category_name','review_count']]
 best_products[:10]
-
-
-# In[18]:
-
 
 # Plotting the best categories for review score
 prodnote_hist = sns.barplot(y = best_products["product_category_name"], x = best_products["review_count"], palette = "BrBG_r");
@@ -131,28 +84,15 @@ plt.xlabel('Product category avarage review score', fontsize = 14)
 plt.ylabel('Product category', fontsize = 14)
 plt.savefig('best10productreviw.png')
 
-
 # ### RFM ANALYSIS
-# 
-
-# In[19]:
-
 
 # Select data for RFM analysis
 df_RFM = all_data[['customer_unique_id', 'frequency', 'recency', 'transaction_value']]
 df_RFM = df_RFM.reset_index(drop=True)
 df_RFM.head()
 
-
-# In[21]:
-
-
 # computation of quantiles
 quintiles = df_RFM[['recency', 'frequency', 'transaction_value']].quantile([.2, .4, .6, .8]).to_dict()
-
-
-# In[22]:
-
 
 # Defining functions for R score and FM score
 def r_score(x):
@@ -179,38 +119,19 @@ def fm_score(x, c):
     else:
         return 5   
 
-
-# In[23]:
-
-
 # Computation of the R, F and M values
 df_RFM['R'] = df_RFM['recency'].apply(lambda x: r_score(x))
 df_RFM['F'] = df_RFM['frequency'].apply(lambda x: fm_score(x, 'frequency'))
 df_RFM['M'] = df_RFM['transaction_value'].apply(lambda x: fm_score(x, 'transaction_value'))
 df_RFM['RFM Score'] = df_RFM['R'].map(str) + df_RFM['F'].map(str) + df_RFM['M'].map(str)
 
-
-# ### Segments
+# Segments
 # One time buyers: low recency, low frequency 
-# 
-# 
 # About to Sleep: low recency, high frequency: the ones that made some purchases but are not active anymore
-# 
-# 
 # Potential Loyalist: high recency, low frequency: new customers who recently made a purchase and might become loyal customers
-# 
-# 
 # Loyal Customers: medium recency, high frequency: we eant them to become Champions
-# 
-# 
 # Champions: high recency, high frequency; higest score 
-# 
-# 
 # Strangers: medium recency, low frequency
-# 
-
-# In[24]:
-
 
 # Build a segmentation map
 segm1_map = {
@@ -231,12 +152,7 @@ all_data['RFM Score'] = all_data['R'].map(str) + all_data['F'].map(str) + all_da
 all_data['Segment1'] = all_data['R'].map(str) + all_data['F'].map(str)
 all_data['Segment1'] = all_data['Segment1'].replace(segm1_map, regex=True)
 
-
-# ### All spenders
-
-# In[119]:
-
-
+# All spenders
 # Segments classified according to how much they spend
 segment1s_counts = df_RFM['Segment1'].value_counts().sort_values(ascending=True)
 
@@ -265,10 +181,7 @@ sns.set(rc={'figure.figsize':(5,10)})
 plt.savefig('rfm_segments.png')
 
 
-# ### Low spenders
-
-# In[25]:
-
+# Low spenders
 
 # Plot for low-spending people
 low_spenders = df_RFM[df_RFM['M'] <= 2]
@@ -302,11 +215,7 @@ sns.set(rc={'figure.figsize':(5,10)})
 plt.show()
 
 
-# ### Average spenders
-
-# In[26]:
-
-
+# Average spenders
 # Plot for average-spending people
 
 avg_spenders = df_RFM[df_RFM['M'] == 3]
@@ -340,10 +249,7 @@ sns.set(rc = {'figure.figsize':(5,10)})
 plt.show()
 
 
-# ### High spenders
-
-# In[27]:
-
+# High spenders
 
 # Plot for high-spending people
 high_spenders = df_RFM[df_RFM['M'] >= 4]
@@ -379,20 +285,13 @@ sns.set(rc = {'figure.figsize':(5,10)})
 plt.show()
 
 
-# ### Values for each Segment
-
-# In[28]:
-
+# Values for each Segment
 
 # Group customers by segments
 df_rfm2 = df_RFM.groupby('Segment1').agg(RecencyMean = ('recency', 'mean'),
                                           FrequencyMean = ('frequency', 'mean'),
                                           MonetaryMean = ('transaction_value', 'mean'),
                                           GroupSize = ('recency', 'size'))
-
-
-# In[30]:
-
 
 # Plot of segments size
 font = {'family' : 'Dejavu Sans',
@@ -413,10 +312,6 @@ plt.title("RFM Segments",fontsize=18,fontweight="bold")
 plt.axis('off')
 plt.savefig('rfm_square.png')
 
-
-# In[31]:
-
-
 # Best 10 products for review score
 prodnote_hist = sns.barplot( y=best_products["product_category_name"], x=best_products["review_count"],palette = "BuPu_r");
 sns.set_context("talk")
@@ -426,10 +321,6 @@ plt.title('Best 10 product categories for review score', fontsize = 16)
 plt.xlabel('Product category avarage review score', fontsize = 14)
 plt.ylabel('Product category', fontsize = 14)
 plt.savefig('best10product per review.png')
-
-
-# In[32]:
-
 
 # 10 mosr ordered product categories
 prodcat = df.groupby(['product_category_name']).sum().reset_index() 
@@ -445,10 +336,6 @@ plt.xlabel('Product category', fontsize = 14)
 plt.ylabel('Ammount of orders per category', fontsize = 14)
 plt.savefig('10 most ordered product categories.png' )
 
-
-# In[33]:
-
-
 # Number of customers by region
 plt.figure(figsize = (10,5))
 plt.title('Customers Per Region')
@@ -460,10 +347,7 @@ plt.xticks(rotation = 90)
 plt.savefig('customers per region.png')
 
 
-# ### Time Data Managing
-
-# In[34]:
-
+# Time Data Managing
 
 # We will work only with the orders with status == delivered
 data__orders=df.loc[df['order_status'] == 'delivered']
@@ -475,19 +359,11 @@ data__orders['dif_exp_delivery'].fillna(0,inplace=True)
 data__orders.dropna(inplace = True)
 data__orders['dif_exp_delivery'] = data__orders['dif_exp_delivery'].astype('int64')
 
-
-# In[35]:
-
-
 # New Columns to add to the dataset
 data__orders['year_purch'] = data__orders['ts_order_purchase'].dt.year
 data__orders['month_purch'] = data__orders['ts_order_purchase'].dt.month
 data__orders['day_purch'] = data__orders['ts_order_purchase'].dt.day
 data__orders['week_day'] = data__orders['ts_order_purchase'].dt.weekday
-
-
-# In[37]:
-
 
 # Assign a number for each day of the week
 day_name = []
@@ -509,19 +385,11 @@ for d in data__orders.week_day:
     day_name.append(d)
 data__orders['week_day'] = day_name
 
-
-# In[38]:
-
-
 # Convert to datetime and compute difference between estimate and actual delivery
 data__orders['ts_order_purchase'] = pd.to_datetime(data__orders['ts_order_purchase'])
 data__orders['ts_order_estimated_delivery'] = pd.to_datetime(data__orders['ts_order_estimated_delivery'])
 data__orders['ts_order_delivered_customer'] = pd.to_datetime(data__orders['ts_order_delivered_customer'])
 data__orders['dif_exp_delivery']=((data__orders['ts_order_estimated_delivery'])-(data__orders['ts_order_delivered_customer'])).dt.days
-
-
-# In[42]:
-
 
 # Time data modifications
 data__orders['ts_order_purchase'] = pd.to_datetime(data__orders['ts_order_purchase'])
@@ -532,10 +400,6 @@ data__orders['hour_purch'] = data__orders['hour_purch'].dt.time
 data__orders['hour_purch'] = data__orders['ts_order_purchase'].dt.round('360min')
 data__orders['month_year_purch'] = data__orders['ts_order_purchase'].dt.strftime('%m-%Y')
 data__orders.drop(['ts_order_purchase'],axis = 1, inplace=True)
-
-
-# In[100]:
-
 
 #Drop some data we will not use
 """data__orders.drop(['ts_order_approved'],axis=1,inplace=True)
@@ -550,23 +414,10 @@ df.drop(['product_length_cm'],axis=1,inplace=True)
 df.drop(['product_height_cm'],axis=1,inplace=True)
 df.drop(['product_width_cm'],axis=1,inplace=True)"""
 
-
-# In[107]:
-
-
 # Data without the dropped columns
 filtro  = data__orders['month_purch'].isin([1,2,3,4,5,6,7,8])
 data_aux= data__orders[filtro]
-
-
-# In[53]:
-
-
 data__orders.to_csv('data__orders.csv')
-
-
-# In[43]:
-
 
 # Distribution of purchases per year
 plt.figure(figsize=(20,7))
@@ -588,10 +439,6 @@ for p in g.patches:
 g.set_ylim(0, max(sizes) * 1.1)
 plt.savefig('distribution purchases per year.png')
 
-
-# In[44]:
-
-
 # Distribution of purchases during the week
 plt.figure(figsize=(15,7))
 weekle_seasonality = data__orders.groupby(['week_day'])['order_id'].nunique().sort_values(ascending=False).reset_index()
@@ -600,10 +447,3 @@ plt.title("Distirbution of purchases during the week", fontsize=20)
 plt.xlabel('day of the week')
 plt.ylabel('Order quantity')
 plt.savefig('distr purchases during week.png')
-
-
-# In[ ]:
-
-
-
-
