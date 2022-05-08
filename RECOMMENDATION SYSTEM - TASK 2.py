@@ -1,8 +1,8 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[46]:
-
+"""
+Machine Learning techniques to increase profitability. 
+NTTData x Luiss
+Martina Manno, Martina Crisafulli, Olimpia Sannucci, Hanna Carucci Viterbi, Tomas Ryen
+"""
 
 # import the libraries needed for the analysis
 import pandas as pd
@@ -17,10 +17,6 @@ from sklearn.decomposition import TruncatedSVD
 from sklearn.model_selection import train_test_split
 from lightfm import LightFM
 
-
-# In[16]:
-
-
 # loading the datasets
 geo = pd.read_csv("01.geo.csv", encoding='cp1252', sep=";")
 custom = pd.read_csv("02.customers.csv", encoding='cp1252', sep=";")
@@ -31,19 +27,11 @@ ord_pay = pd.read_csv("06.order_payments.csv", encoding='cp1252', sep=";")
 prod_rev = pd.read_csv("07.product_reviews.csv", encoding='cp1252', sep=";")
 prod = pd.read_csv("08.products.csv", encoding='cp1252', sep=";")
 
-
-# In[17]:
-
-
 # We notice there are 610 NaN values in product_category_name,
 # for the purpose of our analysis we substitute them with the category "Others"
 prod["product_category_name"] = prod["product_category_name"].fillna("Others")
 max_vals = ord_items.groupby("order_id")["order_item_sequence_id"].max().to_dict()
 ord_items["max_order"] = ord_items["order_id"].map(max_vals)
-
-
-# In[18]:
-
 
 # Merging datasets and data cleaning
 pr = pd.merge(prod, prod_rev, on='product_id')
@@ -52,28 +40,16 @@ custom_df.dropna(subset=['order_id'], inplace=True)
 custom_df = custom_df.drop_duplicates(['customer_unique_id'])
 ord_items.dropna(subset=['order_id'])
 
-
-# In[19]:
-
-
 # Cleaning and merging the datasets by dropping duplicates
 new = pd.merge(ord_items, pr, on=['order_id', 'product_id'])
 final = pd.merge(new, custom_df, on=['order_id'])
 final = final.drop(columns=['order_item_sequence_id'])
 final.drop_duplicates()
 
-
-# In[20]:
-
-
 # Compute the number of unique users and products
 n_users = final["customer_unique_id"].unique().shape[0]
 n_items = final["product_id"].unique().shape[0]
 print("Number of users= "+ str(n_users) + "| Number of products= "+ str(n_items))
-
-
-# In[21]:
-
 
 # Select columns needed for the recommendation systems
 cols = ['product_category_name', 
@@ -82,24 +58,12 @@ cols = ['product_category_name',
         'product_id']
 final = final[cols]
 
-
-# In[22]:
-
-
 # Extract a sample on which to perform the recommendation system
 final_sample= final.sample(10000)
-
-
-# In[23]:
-
 
 # Select users and products from sample
 users = final_sample['customer_unique_id']
 products = final_sample['product_id']
-
-
-# In[24]:
-
 
 # Encode categorical values corresponding to the user and product ids
 le = LabelEncoder() # create object LabelEncoder
@@ -107,26 +71,13 @@ final_sample.iloc[:, 1] = le.fit_transform(final_sample.iloc[:, 1])
 le1 = LabelEncoder() # create object LabelEncoder
 final_sample.iloc[:, 3] = le1.fit_transform(final_sample.iloc[:, 3])
 
-
-# In[25]:
-
-
 # Dictionary containing customer unique id and corresponding encoding value
 final_sample.set_index(users)['customer_unique_id'].to_dict()
-
-
-# In[26]:
-
 
 # Dictionary containing product id and corresponding encoding value
 final_sample.set_index(products)['product_id'].to_dict()
 
-
 # # Recommendation- First approach
-
-# In[28]:
-
-
 # Creating a matrix containinf customers and products
 n_users = final_sample.customer_unique_id.unique().shape[0]
 n_items = final_sample.product_id.unique().shape[0]
@@ -134,10 +85,6 @@ n_items = final_sample['product_id'].max()
 A = np.zeros((n_users,n_items))
 
 print("Original rating matrix : ",A)
-
-
-# In[32]:
-
 
 # Creation of the sparse matrix needed as input for the Nearest Neighbors algorithm
 for i in range(len(A)):
@@ -149,17 +96,9 @@ for i in range(len(A)):
 csr_sample = csr_matrix(A)
 print(csr_sample)
 
-
-# In[33]:
-
-
 # Application of the algorithm, it computes the distance among customers according to the cosine similarity
 knn = NearestNeighbors(metric='cosine', algorithm='brute', n_neighbors=3, n_jobs=-1)
 knn.fit(csr_sample)
-
-
-# In[34]:
-
 
 # Printing what the user likes
 dataset_sort_des = final_sample.sort_values(['customer_unique_id'], ascending=[True])
@@ -167,10 +106,6 @@ filter1 = dataset_sort_des[dataset_sort_des['customer_unique_id'] == 768].produc
 filter1 = filter1.tolist()
 filter1 = filter1[:20]
 print("Items liked by user: ",filter1)
-
-
-# In[35]:
-
 
 # Printing the recommended items to the user
 distances1 = []
@@ -183,11 +118,7 @@ for i in filter1:
 print("Items to be recommended: ",indices1)
 
 
-# # Recommendation- Second approach
-
-# In[39]:
-
-
+# Recommendation- Second approach
 # creating a rating matrix transposed needed as input in the algorithm
 rating_crosstab = final_sample.pivot_table(values='review_score', 
                                            index='customer_unique_id', 
@@ -196,10 +127,6 @@ rating_crosstab = final_sample.pivot_table(values='review_score',
 rating_crosstab.head()
 X = rating_crosstab.T
 
-
-# In[40]:
-
-
 #Applying the Truncated SVD for linear dimensionality reduction
 SVD = TruncatedSVD(n_components=12, random_state=5)
 resultant_matrix = SVD.fit_transform(X)
@@ -207,29 +134,15 @@ resultant_matrix.shape
 corr_mat = np.corrcoef(resultant_matrix)
 corr_mat.shape
 
-
-# In[44]:
-
-
 # Computation of similarity among products based on correlation 
 col_idx = rating_crosstab.columns.get_loc("toys games")
 corr_specific = corr_mat[col_idx]
 pd.DataFrame({'corr_specific':corr_specific, 'Product': rating_crosstab.columns}).sort_values('corr_specific', ascending=False).head(10)
 
-
-# # Recommendation- Third Approach
-# 
-# 
-
-# In[47]:
-
+# Recommendation- Third Approach
 
 # Splitting the dataset into train and test
 train, test = train_test_split(final_sample,test_size= 0.25, random_state=1)
-
-
-# In[48]:
-
 
 # Create data to insert into the algorithm
 item_dict = {}
@@ -243,10 +156,6 @@ final_sample_transformed = final_sample_transformed.sort_values('product_id').re
 final_sample_transformed.head(5)
 # Convert to csr matrix
 final_csr = csr_matrix(final_sample_transformed.drop('product_id', axis=1).values)
-
-
-# In[49]:
-
 
 # Create another a rating matrix using products and reviews
 user_book_interaction = pd.pivot_table(final_sample, index='customer_unique_id', columns='product_id', values='review_score')
@@ -262,10 +171,6 @@ for i in user_id:
 user_book_interaction_csr = csr_matrix(user_book_interaction.values)
 user_book_interaction_csr
 
-
-# In[50]:
-
-
 # LightFM algorithm for recommendation
 model = LightFM(loss='warp',
                 random_state=2016,
@@ -275,10 +180,6 @@ model = LightFM(loss='warp',
 model = model.fit(user_book_interaction_csr,
                   epochs=100,
                   num_threads=16, verbose=False)
-
-
-# In[51]:
-
 
 # Use a function to summarize the results of the algorithm
 def sample_recommendation_user(model, final_sample, customer_unique_id, user_dict, 
@@ -308,10 +209,5 @@ def sample_recommendation_user(model, final_sample, customer_unique_id, user_dic
         print(str(counter) + '- ' + i)
         counter += 1
 
-
-# In[52]:
-
-
 # Result of the algorithm for user 768
 sample_recommendation_user(model, user_book_interaction,768, user_dict, item_dict)
-
