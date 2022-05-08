@@ -1,6 +1,7 @@
-# Project NTTdata x LUISS 
+# NTTdata x LUISS University
 
-The project was assigned by NTTData for the Machine Learning course. The data was collected handling 8 different data sets provided by NTTData regarding the AS-IS process, from order creation to customer review for a seller company operating in the E-COMMERCE market.
+The project was assigned by NTTData for the Machine Learning course.
+The data was collected handling 8 different data sets provided by NTTData regarding the AS-IS process, from order creation to customer review for a seller company operating in the E-COMMERCE market.
 
 The main goal of the business case is to increase profitability by performing the customer analysis identifying groups of users with similar purchasing behaviors in order to create a marketing strategy towards each target. 
 
