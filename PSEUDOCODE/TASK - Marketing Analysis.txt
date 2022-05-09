@@ -1,0 +1,370 @@
+"""
+
+Machine Learning techniques to increase profitability. 
+
+NTTData x Luiss
+
+Martina Manno, Martina Crisafulli, Olimpia Sannucci, Hanna Carucci Viterbi, Tomas Ryen
+
+"""
+
+
+
+# Importing libraries
+
+IMPORT pandas as pd
+
+IMPORT numpy as np
+
+IMPORT matplotlib.pyplot as plt
+
+IMPORT seaborn as sns
+
+from statistics IMPORT mode,mean,median
+
+IMPORT collections
+
+
+
+# Importing the same dataset that we generated IN the RFM analysis
+
+SET data TO pd.read_csv("data__mktingstrategy.csv",sep TO ",")
+
+SET data TO data.drop(columns TO ['Unnamed: 0'])
+
+
+
+# check how many observations we have FOR each year
+
+data.groupby("year_purch").size()
+
+
+
+
+
+# Idea behind the analysis the marketing analysis will be carried out dividing the data IN two years 2018 and 2019 to better detect customer trends and weak spot on which to work on. 
+
+
+
+# Monthly activated users
+
+
+
+# Creating a dataframe with the observations of year 2018
+
+SET df_2018 TO data.loc[(data["year_purch"] EQUALS 2018)]
+
+
+
+# Creating a dataframe with the observations of year 2019
+
+SET df_2019 TO data.loc[(data["year_purch"] EQUALS 2019)]
+
+
+
+# Compute the number of customers that were active daily IN the E-commerce FOR 2018
+
+SET df_2018["month_year_purch"] TO pd.to_datetime(df_2018["month_year_purch"], format TO "%m-%Y")
+
+SET df_mau TO pd.concat([df_2018["month_year_purch"], df_2018["customer_unique_id"]], axis TO 1)
+
+df_mau.set_index("month_year_purch")
+
+SET count_mau TO df_mau.groupby("month_year_purch").size().to_frame("Customer unique id")
+
+
+
+# Plotting the previous data
+
+SET plt.figure(figsize TO (25,5))
+
+SET sns.lineplot(data TO count_mau, x TO "month_year_purch", y TO "Customer unique id")
+
+plt.title("Monthly activated users IN 2018")
+
+#plt.savefig("MAU.png") 
+
+
+
+# Repeating the analysis FOR year 2019
+
+SET df_mau_new TO pd.concat([df_2019["month_year_purch"], df_2019["customer_unique_id"]], axis=1)
+
+df_mau_new.set_index("month_year_purch")
+
+SET count_mau_new TO df_mau_new.groupby("month_year_purch").size().to_frame("Customer unique id")
+
+plt.figure(figsize=(25,5))
+
+sns.lineplot(data=count_mau_new, x="month_year_purch", y="Customer unique id")
+
+plt.title("Monthly activated users IN 2019")
+
+#plt.savefig("MAU 2019.png") 
+
+
+
+
+
+# Daily Spending and Daily Spending per Visitor (RPV)
+
+
+
+# Changing object into datetime and Dropping duplicates FOR 2018
+
+SET df_2018["hour_purch"] TO pd.to_datetime(df_2018["hour_purch"], format TO "%Y-%m-%d")
+
+SET df_2018 TO df_2018.drop_duplicates()
+
+
+
+# Daily spending FOR each unique user IN 2018
+
+SET revenues_day TO df_2018.groupby(["hour_purch", "customer_unique_id"], as_index=False)["price"].sum()
+
+
+
+# Computing the number of visitor per day IN 2018
+
+SET n_visitor_day TO revenues_day.groupby("hour_purch").hour_purch.value_counts().to_frame()
+
+SET n_visitor_day TO n_visitor_day.rename(columns TO {'hour_purch': "visitor/day"})
+
+SET n_visitor_day TO n_visitor_day.reset_index(level TO 1, drop TO True)
+
+
+
+# Computing the daily spending per user each day IN 2018
+
+SET revenues_day TO revenues_day.set_index("hour_purch")
+
+SET revenues_day_new TO pd.merge(revenues_day, n_visitor_day, left_index=True, right_index=True)
+
+SET revenues_day_new["rpv"] TO revenues_day_new["price"]/ revenues_day_new["visitor/day"]
+
+
+
+# Plotting the results FOR 2018
+
+SET plt.figure(figsize TO (30,5))
+
+plt.ylabel('Revenue / Visitor')
+
+plt.title("Revenues per visitor each day 2018")
+
+SET sns.lineplot(data=revenues_day_new, x TO 'hour_purch', y TO 'rpv')
+
+plt.savefig("Revenues per visitor 2018.png") 
+
+
+
+# Changing object into datetime and Dropping duplicates FOR 2019
+
+SET df_2019["hour_purch"] TO pd.to_datetime(df_2019["hour_purch"], format TO "%Y-%m-%d")
+
+
+
+# Daily spending FOR each unique user IN 2019
+
+SET revenues_day_19 TO df_2019.groupby(["hour_purch", "customer_unique_id"], as_index TO False)["price"].sum()
+
+
+
+# Computing the number of visitor per day IN 2019
+
+SET n_visitor_day_19 TO revenues_day_19.groupby("hour_purch").hour_purch.value_counts().to_frame()
+
+SET n_visitor_day_19 TO n_visitor_day_19.rename(columns TO {'hour_purch': "visitor/day"})
+
+SET n_visitor_day_19 TO n_visitor_day_19.reset_index(level TO 1, drop TO True)
+
+
+
+# Computing the daily spending per user each day IN 2019
+
+SET revenues_day_19 TO revenues_day_19.set_index("hour_purch")
+
+SET revenues_day_new19 TO pd.merge(revenues_day_19, n_visitor_day_19, left_index=True, right_index=True)
+
+SET revenues_day_new19["rpv"] TO revenues_day_new19["price"]/ revenues_day_new19["visitor/day"]
+
+
+
+# Plotting the results FOR 2019
+
+SET plt.figure(figsize TO (30,5))
+
+plt.ylabel('Revenue / Visitor')
+
+plt.title("Revenues per visitor each day 2019")
+
+SET sns.lineplot(data TO revenues_day_new19, x TO 'hour_purch', y TO 'rpv')
+
+plt.savefig("Revenues per visitor 2019.png") 
+
+
+
+# Revenues per day 2018
+
+SET plt.figure(figsize TO (30,5))
+
+plt.ylabel('Revenue/day')
+
+plt.title("Revenues per day 2018")
+
+SET sns.lineplot(data TO revenues_day_new, x TO 'hour_purch', y TO 'price')
+
+plt.savefig("Revenues per day 2018.png") 
+
+
+
+# Revenues per day 2019
+
+SET plt.figure(figsize TO (30,5))
+
+plt.ylabel('Revenue/day')
+
+plt.title("Revenues per day 2019")
+
+SET sns.lineplot(data TO revenues_day_new19, x TO 'hour_purch', y TO 'price')
+
+plt.savefig("Revenues per day 2019.png") 
+
+
+
+
+
+# Purchase Trend
+
+# Purchase Trend IN 2018
+
+SET trend TO df_2018.groupby(["hour_purch","order_id"], as_index TO False)["order_id"].size()
+
+SET trend TO trend.groupby("hour_purch").hour_purch.value_counts().to_frame("Order per day")
+
+SET trend TO trend.reset_index(level TO 1, drop TO True)
+
+
+
+# Plotting the purchase trend 2018
+
+SET plt.figure(figsize TO (12,6))
+
+plt.ylabel('order count 2018')
+
+plt.title("Purchase trend 2018")
+
+SET sns.lineplot(data TO trend,x TO 'hour_purch',y TO 'Order per day')
+
+plt.savefig("Purchase trend 2018.png") 
+
+
+
+# Purchase Trend IN 2019
+
+SET trend19 TO df_2019.groupby(["hour_purch","order_id"], as_index TO False)["order_id"].size()
+
+#df_2018.groupby(["hour_purch"]).order_id.value_counts().to_frame()
+
+SET trend19 TO trend19.groupby("hour_purch").hour_purch.value_counts().to_frame("Order per day")
+
+SET trend19 TO trend19.reset_index(level TO 1, drop TO True)
+
+
+
+# Plotting the purchase trend 2019
+
+SET plt.figure(figsize TO (12,6))
+
+plt.ylabel('order count 2019')
+
+plt.title("Purchase trend 2019")
+
+SET sns.lineplot(data TO trend19,x TO 'hour_purch',y TO 'Order per day')
+
+plt.savefig("Purchase trend 2019.png") 
+
+
+
+
+
+# Best Sellers
+
+# Best sellers IN 2018 (OUTPUTed only the first 15)
+
+SET best_sellers TO df_2018.groupby(["seller_id", 'product_category_name']).price.sum().to_frame()
+
+SET best_sellers TO best_sellers.sort_values("price", ascending= False)
+
+best_sellers[1:15]
+
+
+
+##best sellers IN 2019 (OUTPUTed only the first 15)
+
+SET best_sellers TO df_2019.groupby(["seller_id", 'product_category_name']).price.sum().to_frame()
+
+SET best_sellers TO best_sellers.sort_values("price", ascending= False)
+
+best_sellers[1:15]
+
+
+
+
+
+# Best Customers
+
+
+
+# Best customers 2018 (OUTPUTed only the first 15)
+
+SET best_customers TO df_2018.groupby(["customer_unique_id", 'product_category_name']).price.sum().to_frame()
+
+SET best_customers TO best_customers.sort_values("price", ascending TO False)
+
+best_customers[1:15]
+
+
+
+# Best customers 2019 (OUTPUTed only the first 15)
+
+SET best_customers TO df_2019.groupby(["customer_unique_id", 'product_category_name']).price.sum().to_frame()
+
+SET best_customers TO best_customers.sort_values("price", ascending TO False)
+
+best_customers[1:15]
+
+
+
+
+
+# Spending by state
+
+
+
+# Customer spending by autonomous communities IN 2018
+
+SET rev_by_state2018 TO df_2018.groupby("customer_autonomous_community").price.sum().sort_values(ascending TO False).to_frame()
+
+SET sns.barplot(data TO rev_by_state2018, x TO 'price', y TO rev_by_state2018.index, palette TO "BuPu_r" )
+
+plt.title("Spending by autonomous community 2018")
+
+#plt.savefig("Spending by autonomous community 2018.png")
+
+
+
+# Customer spending by autonomous communities IN 2019
+
+SET rev_by_state2019 TO df_2019.groupby("customer_autonomous_community").price.sum().sort_values(ascending TO False).to_frame()
+
+SET sns.barplot(data TO rev_by_state2019, x TO 'price', y TO rev_by_state2019.index, palette= "BuPu_r" )
+
+plt.title("Spending by autonomous community 2019")
+
+#plt.savefig("Spending by autonomous community 2019.png")
+
+
+
+
+

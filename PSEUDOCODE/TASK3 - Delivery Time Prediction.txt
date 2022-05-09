@@ -1,0 +1,344 @@
+"""
+
+Machine Learning techniques to increase profitability. 
+
+NTTData x Luiss
+
+Martina Manno, Martina Crisafulli, Olimpia Sannucci, Hanna Carucci Viterbi, Tomas Ryen
+
+"""
+
+
+
+# Import libraries
+
+IMPORT pandas as pd
+
+IMPORT numpy as np
+
+IMPORT matplotlib.pyplot as plt
+
+IMPORT seaborn as sns
+
+from statistics IMPORT mode,mean,median
+
+from sklearn.preprocessing IMPORT StandardScaler
+
+from sklearn.model_selection IMPORT train_test_split
+
+from sklearn.ensemble IMPORT RandomForestRegressor, GradientBoostingRegressor, ExtraTreesRegressor
+
+from math IMPORT radians, sin, cos, asin, sqrt
+
+from sklearn IMPORT preprocessing, model_selection, metrics
+
+from sklearn.model_selection IMPORT train_test_split
+
+from sklearn.linear_model IMPORT Ridge, Lasso, LinearRegression
+
+from sklearn.neural_network IMPORT MLPRegressor
+
+from sklearn IMPORT neighbors
+
+from sklearn.svm IMPORT SVR
+
+IMPORT time
+
+from sklearn.metrics IMPORT mean_absolute_error, mean_squared_error
+
+
+
+# Load the dataset used FOR the rfm and marketing analysis
+
+SET sel_df1 TO pd.read_csv("data__mktingstrategy.csv",sep TO ",")
+
+SET sel_df1 TO sel_df1.drop(columns TO ['Unnamed: 0'])
+
+
+
+# transform dates into datetime object
+
+SET sel_df1.ts_order_delivered_customer TO pd.to_datetime(sel_df1.ts_order_delivered_customer)
+
+SET sel_df1.ts_order_delivered_carrier TO pd.to_datetime(sel_df1.ts_order_delivered_carrier)
+
+SET sel_df1.ts_order_estimated_delivery TO pd.to_datetime(sel_df1.ts_order_estimated_delivery)
+
+SET sel_df1.ts_order_approved TO pd.to_datetime(sel_df1.ts_order_approved)
+
+
+
+# Add product volume, orders per day and difference between delivery and order approval as additional features
+
+SET sel_df1['product_volume_cm3'] TO sel_df1.product_length_cm * sel_df1.product_height_cm * sel_df1.product_width_cm
+
+SET sel_df1['delivery_approved'] TO (sel_df1.ts_order_delivered_customer-sel_df1.ts_order_approved).dt.days
+
+trend= sel_df1.groupby(["hour_purch","order_id"], as_index=False)["order_id"].size()
+
+trend= trend.groupby("hour_purch").hour_purch.value_counts().to_frame("Order per day")
+
+trend= trend.reset_index(level=1, drop=True)
+
+
+
+# Merging and Removal of dataset features
+
+sel_df1= pd.merge(trend,sel_df1, on="hour_purch")
+
+sel_df1=sel_df1.drop(['order_status','payment_installments_quantity','order_item_sequence_id'], axis=1, errors='ignore')
+
+sel_df1=sel_df1.drop(['payment_method_sequence_id'], axis=1, errors='ignore')
+
+sel_df1=sel_df1.drop(['transaction_value'], axis=1, errors='ignore')
+
+
+
+# Find and Remove outliers
+
+sel_df1.boxplot()
+
+SET plt.xticks(rotation TO 45)
+
+
+
+# Since there are many outliers, this function remove them 
+
+CALL #F DEFINE FUNCTION remove_outlier(df_in, col_name):
+
+    SET q1 TO df_in[col_name].quantile(0.25)
+
+    SET q3 TO df_in[col_name].quantile(0.75)
+
+    SET iqr TO q3-q1 #Interquartile range
+
+    SET fence_low  TO q1-1.5*iqr
+
+    SET fence_high TO q3+1.5*iqr
+
+    SET df_out TO df_in.loc[(df_in[col_name] > fence_low) & (df_in[col_name] < fence_high)]
+
+    RETURN df_out
+
+
+
+# Remove outliers IN the variables having the highest number of them
+
+sel_df1= remove_outlier(sel_df1, "product_weight_gr")
+
+sel_df1= remove_outlier(sel_df1, "product_volume_cm3")
+
+sel_df1= remove_outlier(sel_df1, "price")
+
+
+
+# Shipping cost into float
+
+SET sel_df1["shipping_cost"]  TO [float(str(i).replace(",", ".")) FOR i IN sel_df1["shipping_cost"] ]
+
+
+
+# Baseline
+
+# Before applying the models, set a baseline to compare results and verify the funcitoning of the new model, IN this case the baseline will be the current delay IN time shipping predictions.
+
+
+
+# Extract the day of the estimated delivery and actual delivery
+
+sel_df1["estimate_day"]=sel_df1.ts_order_estimated_delivery.dt.day
+
+sel_df1["delivery_day"]= sel_df1.ts_order_delivered_customer.dt.day
+
+
+
+# Compute the errors of the current data and use them as baseline model
+
+baseline_data= {}
+
+SET baseline_data["Test_RMSE"] TO sqrt(mean_squared_error(sel_df1.delivery_day,sel_df1.estimate_day))
+
+baseline_data["MAE"]= mean_absolute_error(sel_df1.delivery_day, sel_df1.estimate_day)
+
+baseline_data
+
+
+
+# Correlation plot of the variables
+
+SET mask TO np.zeros_like(sel_df1[sel_df1.columns[::-1]].corr(), dtype=np.bool)
+
+SET mask[np.triu_indices_from(mask)] TO True
+
+plt.figure(figsize=(10, 6))
+
+SET sns.heatmap(sel_df1[sel_df1.columns[::-1]].corr(), cmap=sns.diverging_palette(20, 220, n=200), annot=True, mask=mask, center TO 0, )
+
+SET plt.title("Heatmap of all the Features", fontsize TO 30)
+
+
+
+# y as difference between delivery and approval
+
+# Define target and feature variables, here the initial features 
+
+#were chosen based on the possible influence on shipping
+
+SET target TO 'delivery_approved'
+
+SET features TO ['product_volume_cm3', 
+
+            'product_weight_gr', 
+
+            'day_purch',
+
+            'shipping_cost',
+
+            'price',
+
+            'product_photo_quantity',
+
+            'day_purch',
+
+            'week_day',
+
+            'Order per day'
+
+           ]
+
+
+
+# Extract target and features
+
+SET X TO sel_df1[features]
+
+SET y TO sel_df1[target]
+
+
+
+SET X_data TO StandardScaler().fit_transform(X)
+
+SET X_train, X_test, y_train, y_test TO train_test_split(X_data, y, test_size=0.2, random_state TO 14)
+
+
+
+# we fit the model and compute feature importance to detect the most relevant variables to put IN the model
+
+SET features TO X.columns
+
+SET rf TO RandomForestRegressor(n_estimators TO 300,min_samples_split=8,max_features =4)
+
+rf.fit(X_train, y_train)
+
+
+
+SET importances TO rf.feature_importances_
+
+SET indices TO np.argsort(importances)
+
+
+
+plt.figure(figsize=(12,16))
+
+plt.title('Feature Importances FOR Random Forest')
+
+plt.barh(range(len(indices)), importances[indices], color='g', align='center')
+
+plt.yticks(range(len(indices)), [features[i] FOR i IN indices])
+
+plt.xlabel('Relative Importance')
+
+
+
+# Based on the results, two variables are removed: "week_day" and "product_photo_quantity"
+
+SET target TO 'delivery_approved'
+
+SET features TO ['product_volume_cm3', 
+
+            'product_weight_gr', 
+
+            'day_purch', 
+
+            'shipping_cost',
+
+            'price',
+
+            'day_purch',
+
+            'Order per day'
+
+          ]
+
+
+
+# Applying the models to the data 
+
+SET models TO [
+
+           ['Lasso: ', Lasso()],
+
+           ['Ridge: ', Ridge()],
+
+           ['KNeighborsRegressor: ',  neighbors.KNeighborsRegressor()],
+
+           ['RandomForest ',RandomForestRegressor()],
+
+           ['ExtraTreeRegressor :',ExtraTreesRegressor()],
+
+           ['GradientBoostingRegressor: ', GradientBoostingRegressor()] 
+
+           #['MLPRegressor: ', MLPRegressor(  activation='relu', solver='adam',learning_rate='adaptive',max_iter=10000,learning_rate_init=0.01,alpha=0.01)]
+
+         ]
+
+
+
+SET model_data TO []
+
+FOR name,curr_model IN models :
+
+    SET curr_model_data TO {}
+
+    SET curr_model.random_state TO 100
+
+    SET curr_model_data["Name"] TO name
+
+    SET start TO time.time()
+
+    curr_model.fit(X_train,y_train)
+
+    SET end TO time.time()
+
+    SET curr_model_data["Train_Time"] TO end - start
+
+    SET curr_model_data["Test_RMSE"] TO sqrt(mean_squared_error(y_test,curr_model.predict(X_test)))
+
+    SET curr_model_data["MAE"] TO mean_absolute_error(y_test, curr_model.predict(X_test))
+
+    model_data.append(curr_model_data)
+
+
+
+# See the results, the lowest MAE corresponds to the ExtraTreeRegressor algorithm 
+
+# and means that the mean delay has been reduced to 4 days 
+
+SET model_scores TO pd.DataFrame(model_data)
+
+model_scores
+
+
+
+# Plotting RMSE results FOR all models
+
+SET model_scores.plot(x TO "Name", y TO ['Test_RMSE'], kind TO "bar" , title TO 'RMSE Results' , figsize TO (10,8))
+
+
+
+# Plotting MAE results FOR all models
+
+SET model_scores.plot(x="Name", y=['MAE'], kind="bar" , title TO 'MAE Results' , figsize= (10,8))
+
+
+

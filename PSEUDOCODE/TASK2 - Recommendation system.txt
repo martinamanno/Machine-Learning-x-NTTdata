@@ -1,0 +1,436 @@
+"""
+
+Machine Learning techniques to increase profitability. 
+
+NTTData x Luiss
+
+Martina Manno, Martina Crisafulli, Olimpia Sannucci, Hanna Carucci Viterbi, Tomas Ryen
+
+"""
+
+
+
+# IMPORT the libraries needed FOR the analysis
+
+IMPORT pandas as pd
+
+IMPORT numpy as np
+
+IMPORT matplotlib.pyplot as plt
+
+IMPORT seaborn as sns
+
+from statistics IMPORT mode,mean,median
+
+from sklearn.preprocessing IMPORT LabelEncoder
+
+from scipy.sparse IMPORT csr_matrix
+
+from sklearn.neighbors IMPORT NearestNeighbors
+
+from sklearn.decomposition IMPORT TruncatedSVD
+
+from sklearn.model_selection IMPORT train_test_split
+
+from lightfm IMPORT LightFM
+
+
+
+# Loading the datasets
+
+SET geo TO pd.read_csv("01.geo.csv", encoding='cp1252', sep=";")
+
+SET custom TO pd.read_csv("02.customers.csv", encoding='cp1252', sep=";")
+
+SET sel TO pd.read_csv("03.sellers.csv", encoding='cp1252', sep=";")
+
+SET ord_status TO pd.read_csv("04.order_status.csv", encoding='cp1252', sep=";")
+
+SET ord_items TO pd.read_csv("05.order_items.csv", encoding='cp1252', sep=";")
+
+SET ord_pay TO pd.read_csv("06.order_payments.csv", encoding='cp1252', sep=";")
+
+SET prod_rev TO pd.read_csv("07.product_reviews.csv", encoding='cp1252', sep=";")
+
+SET prod TO pd.read_csv("08.products.csv", encoding='cp1252', sep=";")
+
+
+
+# We notice there are 610 NaN values IN product_category_name,
+
+# FOR the purpose of our analysis we substitute them with the category "Others"
+
+SET prod["product_category_name"] TO prod["product_category_name"].fillna("Others")
+
+SET max_vals TO ord_items.groupby("order_id")["order_item_sequence_id"].max().to_dict()
+
+SET ord_items["max_order"] TO ord_items["order_id"].map(max_vals)
+
+
+
+# Merging datasets and data cleaning
+
+SET pr TO pd.merge(prod, prod_rev, on='product_id')
+
+SET custom_df TO pd.merge(custom, ord_status, on='customer_id')
+
+custom_df.dropna(subset=['order_id'], inplace=True)
+
+SET custom_df TO custom_df.drop_duplicates(['customer_unique_id'])
+
+ord_items.dropna(subset=['order_id'])
+
+
+
+# Cleaning and merging the datasets by dropping duplicates
+
+SET new TO pd.merge(ord_items, pr, on=['order_id', 'product_id'])
+
+SET final TO pd.merge(new, custom_df, on=['order_id'])
+
+SET final TO final.drop(columns=['order_item_sequence_id'])
+
+final.drop_duplicates()
+
+
+
+# Compute the number of unique users and products
+
+SET n_users TO final["customer_unique_id"].unique().shape[0]
+
+SET n_items TO final["product_id"].unique().shape[0]
+
+OUTPUT("Number of users= "+ str(n_users) + "| Number of products= "+ str(n_items))
+
+
+
+# Select columns needed FOR the recommendation systems
+
+SET cols TO ['product_category_name', 
+
+        'customer_unique_id', 
+
+        'review_score', 
+
+        'product_id']
+
+SET final TO final[cols]
+
+
+
+# Extract a sample on which to perform the recommendation system
+
+final_sample= final.sample(10000)
+
+
+
+# Select users and products from sample
+
+SET users TO final_sample['customer_unique_id']
+
+SET products TO final_sample['product_id']
+
+
+
+#Three different Recommendation Systems were implemented to best visualize the preferences of each customer. Before doing the recommendation systems datasets were merged, variables were labeled encoded
+
+
+
+# Encode categorical values corresponding to the user and product ids
+
+SET le TO LabelEncoder() # create object LabelEncoder
+
+SET final_sample.iloc[:, 1] TO le.fit_transform(final_sample.iloc[:, 1])
+
+SET le1 TO LabelEncoder() # create object LabelEncoder
+
+SET final_sample.iloc[:, 3] TO le1.fit_transform(final_sample.iloc[:, 3])
+
+
+
+# And then dictionaries were created both for users and products to identify them.
+
+final_sample.set_index(users)['customer_unique_id'].to_dict()
+
+
+
+# Dictionary containing product id and corresponding encoding value
+
+final_sample.set_index(products)['product_id'].to_dict()
+
+#The goal here is to recommend the item which correlates the most with the product of interest. For each product it estimates the correlated product that can be then recommended. Firstly, a matrix of ratings is built.
+
+
+# Creating a matrix containinf customers and products
+
+SET n_users TO final_sample.customer_unique_id.unique().shape[0]
+
+SET n_items TO final_sample.product_id.unique().shape[0]
+
+SET n_items TO final_sample['product_id'].max()
+
+SET A TO np.zeros((n_users,n_items))
+
+
+
+OUTPUT("Original rating matrix : ",A)
+
+
+
+# Creation of the sparse matrix needed as INPUT FOR the Nearest Neighbors algorithm
+
+FOR i IN range(len(A)):
+
+    FOR j IN range(len(A[0])):
+
+        IF A[i][j] >= 3:
+
+            SET A[i][j] TO 1
+
+        ELSE:
+
+            SET A[i][j] TO 0
+
+SET csr_sample TO csr_matrix(A)
+
+OUTPUT(csr_sample)
+
+
+
+# Application of the K-NN algorithm, it computes the distance among customers according to the cosine similarity in order to find the nearest users. To perform this, it uses the cosine similarity. The output gives back what the user likes and what you could recommend
+
+SET knn TO NearestNeighbors(metric='cosine', algorithm='brute', n_neighbors=3, n_jobs=-1)
+
+knn.fit(csr_sample)
+
+
+
+# Printing what the user likes
+
+SET dataset_sort_des TO final_sample.sort_values(['customer_unique_id'], ascending=[True])
+
+SET filter1 TO dataset_sort_des[dataset_sort_des['customer_unique_id'] EQUALS 768].product_id
+
+SET filter1 TO filter1.tolist()
+
+SET filter1 TO filter1[:20]
+
+OUTPUT("Items liked by user: ",filter1)
+
+
+
+# Printing the recommended items to the user
+
+SET distances1 TO []
+
+SET indices1 TO []
+
+FOR i IN filter1:
+
+    SET distances , indices TO knn.kneighbors(csr_sample[i],n_neighbors=3)
+
+    SET indices TO indices.flatten()
+
+    SET indices TO indices[1:]
+
+    indices1.extend(indices)
+
+OUTPUT("Items to be recommended: ",indices1)
+
+
+
+
+
+# Recommendation- Second approach. This recommendation system is based on a pivot table built on review scores and product categories.
+
+# creating a rating matrix transposed needed as INPUT IN the algorithm
+
+SET rating_crosstab TO final_sample.pivot_table(values='review_score', 
+
+                                           index='customer_unique_id', 
+
+                                           columns='product_category_name', 
+
+                                           fill_value=0)
+
+rating_crosstab.head()
+
+SET X TO rating_crosstab.T
+
+
+# The table is then transposed and a matrix factorization technique similar to PCA is used, the Truncated Singular Value Decomposition. It drops the digits after the decimal place for shorting the value of float digits mathematically
+
+#Applying the Truncated SVD FOR linear dimensionality reduction
+
+SET SVD TO TruncatedSVD(n_components=12, random_state=5)
+
+SET resultant_matrix TO SVD.fit_transform(X)
+
+resultant_matrix.shape
+
+SET corr_mat TO np.corrcoef(resultant_matrix)
+
+corr_mat.shape
+
+
+
+# Computation of similarity among products based on correlation 
+
+SET col_idx TO rating_crosstab.columns.get_loc("toys games")
+
+SET corr_specific TO corr_mat[col_idx]
+
+pd.DataFrame({'corr_specific':corr_specific, 'Product': rating_crosstab.columns}).sort_values('corr_specific', ascending=False).head(10)
+
+# The output gives back which products to recommend based on the correlations between two products.
+
+
+
+# Recommendation- Third Approach. The idea here is to use a mix of algorithms that consider both implicit and explicit feedback. It starts off by building a matrix: based on the interactions between users and products
+
+# Splitting the dataset into train and test
+
+SET train, test TO train_test_split(final_sample,test_size= 0.25, random_state=1)
+
+
+
+# Create data to insert into the algorithm
+
+SET item_dict TO {}
+
+SET df TO final_sample[['product_id', 'product_category_name']].sort_values('product_id').reset_index()
+
+FOR i IN range(df.shape[0]):
+
+    SET item_dict[(df.loc[i,'product_id'])] TO df.loc[i,'product_category_name']
+
+
+
+# Dummify categorical features
+
+SET final_sample_transformed TO final_sample.drop(columns="customer_unique_id")
+
+SET final_sample_transformed TO pd.get_dummies(final_sample, columns TO ['review_score', 'product_category_name'])
+
+SET final_sample_transformed TO final_sample_transformed.sort_values('product_id').reset_index().drop('index', axis=1)
+
+final_sample_transformed.head(5)
+
+
+
+# Convert to csr matrix
+
+SET final_csr TO csr_matrix(final_sample_transformed.drop('product_id', axis=1).values)
+
+
+
+# Create another a rating matrix using products and reviews
+
+SET user_book_interaction TO pd.pivot_table(final_sample, index='customer_unique_id', columns='product_id', values='review_score')
+
+
+
+# Fill missing values with 0
+
+SET user_book_interaction TO user_book_interaction.fillna(0)
+
+SET user_id TO list(user_book_interaction.index)
+
+SET user_dict TO {}
+
+SET counter TO 0 
+
+FOR i IN user_id:
+
+    SET user_dict[i] TO counter
+
+    counter += 1
+
+
+
+# Convert to csr matrix
+
+SET user_book_interaction_csr TO csr_matrix(user_book_interaction.values)
+
+user_book_interaction_csr
+
+
+
+# LightFM algorithm to fit the model
+
+SET model TO LightFM(loss='warp',
+
+                random_state=2016,
+
+                learning_rate=0.90,
+
+                no_components=150,
+
+                user_alpha=0.000005)
+
+SET model TO model.fit(user_book_interaction_csr,
+
+                  epochs=100,
+
+                  num_threads=16, verbose=False)
+
+
+
+# Use a function to summarize the results of the algorithm
+
+CALL #F DEFINE FUNCTION sample_recommendation_user(model, final_sample, customer_unique_id, user_dict, 
+
+                               SET item_dict,threshold TO 0,nrec_items TO 5, show TO True):
+
+    SET n_users, n_items TO final_sample.shape
+
+    SET user_x TO user_dict[customer_unique_id]
+
+    SET scores TO pd.Series(model.predict(user_x,np.arange(n_items), item_features=final_csr))
+
+    SET scores.index TO final_sample.columns
+
+    SET scores TO list(pd.Series(scores.sort_values(ascending TO False).index))
+
+    
+
+    SET known_items TO list(pd.Series(final_sample.loc[customer_unique_id,:]                                  [final_sample.loc[customer_unique_id,:] > threshold].index).sort_values(ascending TO False))
+
+    
+
+    SET scores TO [x FOR x IN scores IF x not IN known_items]
+
+    SET RETURN_score_list TO scores[0:nrec_items]
+
+    SET known_items TO list(pd.Series(known_items).apply(lambda x: item_dict[x]))
+
+    SET scores TO list(pd.Series(RETURN_score_list).apply(lambda x: item_dict[x]))
+
+    IF show EQUALS True:
+
+        OUTPUT ("User: " + str(customer_unique_id))
+
+        OUTPUT("Known Likes:")
+
+        
+
+    SET counter TO 1
+
+    FOR i IN known_items:
+
+        OUTPUT(str(counter) + '- ' + i)
+
+        counter += 1
+
+    OUTPUT("\n Recommended Items:")
+
+    FOR i IN scores:
+
+        OUTPUT(str(counter) + '- ' + i)
+
+        counter += 1
+
+# The output gives back what the user likes and what’s recommended for him. 
+# Result of the algorithm FOR user 768
+
+sample_recommendation_user(model, user_book_interaction,768, user_dict, item_dict)

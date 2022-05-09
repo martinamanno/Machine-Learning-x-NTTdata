@@ -1,0 +1,571 @@
+"""
+
+Machine Learning techniques to increase profitability. 
+
+NTTData x Luiss
+
+Martina Manno, Martina Crisafulli, Olimpia Sannucci, Hanna Carucci Viterbi, Tomas Ryen
+
+"""
+
+
+
+IMPORT pandas as pd
+
+IMPORT numpy as np
+
+IMPORT matplotlib.pyplot as plt
+
+IMPORT seaborn as sns
+
+from statistics IMPORT mode, mean, median
+
+IMPORT collections
+
+from sklearn.preprocessing IMPORT StandardScaler
+
+from sklearn.cluster IMPORT KMeans
+
+
+
+# Loading the datasets
+
+SET geo TO pd.read_csv("01.geo.csv", encoding='cp1252', sep=";")
+
+SET custom TO pd.read_csv("02.customers.csv", encoding='cp1252', sep=";")
+
+SET sel TO pd.read_csv("03.sellers.csv", encoding='cp1252', sep=";")
+
+SET ord_status TO pd.read_csv("04.order_status.csv", encoding='cp1252', sep=";")
+
+SET ord_items TO pd.read_csv("05.order_items.csv", encoding='cp1252', sep=";")
+
+SET ord_pay TO pd.read_csv("06.order_payments.csv", encoding='cp1252', sep=";")
+
+SET prod_rev TO pd.read_csv("07.product_reviews.csv", encoding='cp1252', sep=";")
+
+SET prod TO pd.read_csv("08.products.csv", encoding='cp1252', sep=";")
+
+
+
+# We notice there are 610 NaN values IN product_category_name,for the purpose of our analysis we substitute them with the category "Others"
+
+prod["product_category_name"].isna().sum()
+
+SET prod["product_category_name"] TO prod["product_category_name"].fillna("Others")
+
+
+
+# We added one additional value identifying the number of elements FOR each order
+
+SET max_vals TO ord_items.groupby("order_id")["order_item_sequence_id"].max().to_dict()
+
+SET ord_items["max_order"] TO ord_items["order_id"].map(max_vals)
+
+
+
+# Cleaning the customers df by dropping NaN and duplicates
+
+SET custom_df TO pd.merge(custom, ord_status, on='customer_id')
+
+custom_df.dropna(subset=['order_id'], inplace=True)
+
+SET custom_df TO custom_df.drop_duplicates(['customer_unique_id'])
+
+
+
+# Drop NaN from ord_items IN column order_id
+
+ord_items.dropna(subset=['order_id'])
+
+
+
+# Cleaning and merging the datasets by dropping duplicates
+
+SET new TO pd.merge(ord_items, prod_rev, on=['order_id', 'product_id'])
+
+SET new TO pd.merge(new, prod, on=['product_id'])
+
+SET final TO pd.merge(new, custom_df, on=['order_id'])
+
+SET final TO final.drop_duplicates()
+
+SET final TO final.drop(columns=['order_item_sequence_id'])
+
+final.drop_duplicates()
+
+
+
+# Completing the merging process
+
+SET ord_pay TO ord_pay.dropna()
+
+SET final_new TO pd.merge(final, ord_pay, on=['order_id'])
+
+SET final_new TO final_new.drop(columns=['ts_order_estimated_delivery',
+
+                                    'ts_order_delivered_carrier',
+
+                                    'ts_order_purchase',
+
+                                    'ts_order_approved',
+
+                                    'ts_order_delivered_customer'])
+
+SET final_new TO final_new.drop(columns=['product_weight_gr',
+
+                                    'product_length_cm',
+
+                                    'product_height_cm',
+
+                                    'product_width_cm'])
+
+SET final_new TO final_new.drop_duplicates()
+
+SET final_new TO final_new.drop(columns=['max_shipping_seller_date',
+
+                                    'review_date',
+
+                                    'order_status',
+
+                                    'payment_method_sequence_id'])
+
+
+
+# Before applying any algorithm we make sure the dataset does not contain NaN
+
+SET final_new TO final_new[~final_new.isin([np.nan, np.inf, -np.inf]).any(1)]
+
+
+
+# Definition of the independent variables used IN the analysis
+
+SET X TO final_new[["payment_method",
+
+               "price",
+
+               'shipping_cost',
+
+               'max_order',
+
+               'review_score',
+
+               'product_category_name',
+
+               'product_photo_quantity',
+
+               'customer_autonomous_community',
+
+               "payment_installments_quantity",
+
+               "transaction_value"]]
+
+
+
+# Copy of the dataset before applying models
+
+SET X_copy TO X.copy()
+
+SET X_copy TO pd.DataFrame(X_copy)
+
+
+
+# Converting numerical columns datatype as float
+
+SET X_copy["price"] TO [float(str(i).replace(",", ".")) FOR i IN X_copy["price"]]
+
+SET X_copy["shipping_cost"] TO [float(str(i).replace(",", ".")) FOR i IN X_copy["shipping_cost"]]
+
+SET X_copy["transaction_value"] TO [float(str(i).replace(",", ".")) FOR i IN X_copy["transaction_value"]]
+
+
+
+# Clustering online customers with similar interests geographically near can improve performance. Moreover, clustering enhance recommendation systems. Clusters in large graphs can be used to create data structures for efficient storage of graph data to handle queries or path searches. Two methods have been used for the clustering approach: the first is the following.
+
+
+
+# First step, the categorical variables (payment method, product category name and customer autonomous community) have been label encoded. 
+
+
+SET categorical_cols TO ['payment_method',
+
+                    'product_category_name', 
+
+                    'customer_autonomous_community']
+
+
+
+# Numerical columns to be standardized 
+
+SET cols_stand TO ['price',
+
+             'shipping_cost',
+
+             'transaction_value',
+
+             'max_order',
+
+             'product_photo_quantity',
+
+             'review_score',
+
+             'payment_installments_quantity']
+
+
+
+# Transform the categorical values into dummies
+
+SET X_copy TO pd.get_dummies(X_copy, columns TO categorical_cols, drop_first= True)
+
+
+
+# Standardization of independent variables
+
+SET sc_X TO StandardScaler()
+
+SET X_copy[cols_stand] TO sc_X.fit_transform(X_copy[cols_stand])
+
+
+
+# Plotting the elbow curve to decide how many clusters to take
+
+SET wcss TO []
+
+FOR i IN range(1, 11):
+
+    SET kmeans TO KMeans(n_clusters TO i, init TO 'k-means++', random_state TO 42)
+
+    kmeans.fit(X_copy)
+
+    wcss.append(kmeans.inertia_)
+
+plt.plot(range(1, 11), wcss)
+
+plt.title('The Elbow Method')
+
+plt.xlabel('Number of clusters')
+
+plt.ylabel('WCSS')
+
+plt.show()
+
+
+
+# The optimal number of cluster is 6, we fit the data to the K-Means algorithm to find the clusters
+
+SET km TO KMeans(n_clusters=6)
+
+km.fit(X_copy)
+
+km.predict(X_copy)
+
+SET labels TO km.labels_
+
+
+# The distribution of each of the clusters for some of the variables (in particular price, transaction value, shipping cost, review score, photo quantity and installments) has been visualized.  The variables shipping cost, transaction value and price seem to have particularly high values of outliers.
+
+
+
+# Predicting the cluster segments
+
+SET y_kmeans TO km.fit_predict(X_copy)
+
+
+
+# Add the cluster to the dataframe
+
+SET X_copy['Cluster Labels'] TO labels
+
+SET X_copy['Segment'] TO X_copy['Cluster Labels'].map({0:'First', 1:'Second',2:'Third',3:'Fourth',4:'Fifth',5: 'Sixth'})
+
+
+
+# Order the clusters
+
+SET X_copy['Segment'] TO X_copy['Segment'].astype('category')
+
+SET X_copy['Segment'] TO X_copy['Segment'].cat.reorder_categories(['First','Second','Third','Fourth','Fifth','Sixth'])
+
+SET X_copy.rename(columns TO {'Cluster Labels':'Total'}, inplace TO True)
+
+
+
+# Transform back the standardized features
+
+SET X_copy[cols_stand] TO sc_X.inverse_transform(X_copy[cols_stand])
+
+
+
+# Six clusters segment
+
+SET cc0 TO X_copy[X_copy['Segment'] EQUALS 'First']
+
+SET cc1 TO X_copy[X_copy['Segment'] EQUALS 'Second']
+
+SET cc2 TO X_copy[X_copy['Segment'] EQUALS 'Third']
+
+SET cc3 TO X_copy[X_copy['Segment'] EQUALS 'Fourth']
+
+SET cc4 TO X_copy[X_copy['Segment'] EQUALS 'Fifth']
+
+SET cc5 TO X_copy[X_copy['Segment'] EQUALS 'Sixth']
+
+
+
+# Undummy function applied to the encoded categorical variables
+
+CALL #F DEFINE FUNCTION undummy(d):
+
+    RETURN d.dot(d.columns)
+
+X_copy= X_copy.assign(Category=X_copy.filter(regex='^product_category_name').pipe(undummy),
+
+                      Payment=X_copy.filter(regex='^payment_method').pipe(undummy),
+
+                      Location=X_copy.filter(regex='^customer_autonomous_community').pipe(undummy))
+
+
+
+# Drop columns 
+
+cols_to_drop= ["payment_method_credit_card",
+
+               'payment_method_debit_card',
+
+               'payment_method_voucher',
+
+               'product_category_name_automotive',
+
+               'product_category_name_bakeware',
+
+               'product_category_name_beauty & personal care',
+
+               'product_category_name_bedroom decor',
+
+               'product_category_name_book',
+
+               'product_category_name_business office',
+
+               'product_category_name_camera & photo',
+
+               'product_category_name_cd vinyl',
+
+               'product_category_name_ceiling fans',
+
+               'product_category_name_cell phones',
+
+               'product_category_name_cleaning supplies',
+
+               'product_category_name_coffee machines',
+
+               'product_category_name_comics',
+
+               'product_category_name_computer accessories',
+
+               'product_category_name_computers tablets',
+
+               'product_category_name_diet sports nutrition',
+
+               'product_category_name_dvd',
+
+               'product_category_name_event & party supplies',
+
+               'product_category_name_fabric',
+
+               'product_category_name_fashion & shoes',
+
+               'product_category_name_film & photography',
+
+               'product_category_name_fire safety',
+
+               'product_category_name_food',
+
+               'product_category_name_fragrance',
+
+               'product_category_name_furniture',
+
+               'product_category_name_handbags & accessories',
+
+               'product_category_name_hardware',
+
+               'product_category_name_headphones',
+
+               'product_category_name_health household',
+
+               'product_category_name_home accessories',
+
+               'product_category_name_home appliances',
+
+               'product_category_name_home audio',
+
+               'product_category_name_home emergency kits',
+
+               'product_category_name_home lighting',
+
+               'product_category_name_home security systems',
+
+               'product_category_name_jewelry',
+
+               'product_category_name_kids',
+
+               'product_category_name_kids fashion',
+
+               'product_category_name_kitchen & dining',
+
+               'product_category_name_lawn garden',
+
+               'product_category_name_light bulbs',
+
+               'product_category_name_luggage',
+
+               'product_category_name_mattresses & pillows',
+
+               'product_category_name_medical supplies',
+
+               "product_category_name_men's fashion",
+
+               'product_category_name_model hobby building',
+
+               'product_category_name_monitors',
+
+               'product_category_name_music instruments',
+
+               'product_category_name_office products',
+
+               'product_category_name_oral care',
+
+               'product_category_name_painting',
+
+               'product_category_name_pet food',
+
+               'product_category_name_pet supplies',
+
+               'product_category_name_safety apparel',
+
+               'product_category_name_seasonal decor',
+
+               'product_category_name_sofa',
+
+               'product_category_name_sport outdoors',
+
+               'product_category_name_television & video',
+
+               'product_category_name_tools home improvement',
+
+               'product_category_name_toys games',
+
+               'product_category_name_underwear',
+
+               'product_category_name_videogame',
+
+               'product_category_name_videogame console',
+
+               'product_category_name_wall art',
+
+               'product_category_name_watches',
+
+               'product_category_name_wellness & relaxation',
+
+               "product_category_name_woman's fashion",
+
+               'customer_autonomous_community_Aragón',
+
+               'customer_autonomous_community_Baleares',
+
+               'customer_autonomous_community_Cantabria',
+
+               'customer_autonomous_community_Castilla y León',
+
+               'customer_autonomous_community_Castilla-La Mancha',
+
+               'customer_autonomous_community_Cataluña',
+
+               'customer_autonomous_community_Comunidad Foral de Navarra',
+
+               'customer_autonomous_community_Comunidad Valenciana',
+
+               'customer_autonomous_community_Comunidad de Madrid',
+
+               'customer_autonomous_community_Extremadura',
+
+               'customer_autonomous_community_Galicia',
+
+               'customer_autonomous_community_Islas Canarias',
+
+               'customer_autonomous_community_La Rioja',
+
+               'customer_autonomous_community_País Vasco',
+
+               'customer_autonomous_community_Principado de Asturias',
+
+               'customer_autonomous_community_Región de Murcia']
+
+X_copy= X_copy.drop(columns= cols_to_drop)
+
+
+
+# Summary of the clusters, choosing mean FOR numerical columns and mode FOR categorical ones
+
+SET clusters3 TO X_copy.groupby('Segment').agg(
+
+    {
+
+        'Total':'count',
+
+        'Category': lambda x: x.value_counts().index[0],
+
+        'Payment': lambda x: x.value_counts().index[0],
+
+        'Location':lambda x: x.value_counts().index[0],
+
+        'price': 'mean',
+
+        'shipping_cost': 'mean',
+
+        'max_order': 'mean',
+
+        'review_score': 'mean',
+
+        'product_photo_quantity': 'mean',
+
+        'transaction_value':'mean',
+
+        'payment_installments_quantity':'mean'
+
+    }
+
+).reset_index()
+
+clusters3 
+
+
+
+# Create boxplots to the distribution of the variables IN each cluster
+
+SET fig, axes TO plt.subplots(1, 6, figsize=(30,15))
+
+SET ax TO sns.boxplot(ax=axes[0], x="Segment", y="price", data=X_copy)
+
+ax.title.set_text('Price IN All Clusters')
+
+SET ax2 TO sns.boxplot(ax=axes[1], x="Segment", y="review_score", data=X_copy)
+
+ax2.title.set_text('Review Score IN All Clusters')
+
+SET ax3 TO sns.boxplot(ax=axes[2], x="Segment", y="product_photo_quantity", data=X_copy)
+
+ax3.title.set_text('Photo Quantity  IN All Clusters')
+
+SET ax4 TO sns.boxplot(ax=axes[3], x="Segment", y="payment_installments_quantity", data=X_copy)
+
+ax4.title.set_text('Installments IN All Clusters')
+
+SET ax5 TO sns.boxplot(ax=axes[4], x="Segment", y="transaction_value", data=X_copy)
+
+ax5.title.set_text('Transaction Value IN All Clusters')
+
+SET ax6 TO sns.boxplot(ax=axes[5], x="Segment", y="shipping_cost", data=X_copy)
+
+ax6.title.set_text('Shipping Cost  IN All Clusters')
+
+plt.show()
