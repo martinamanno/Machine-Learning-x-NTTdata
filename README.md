@@ -9,4 +9,11 @@ After achieving this goal, the next steps concern the recommendation System able
 
 In order to achieve these 3 main goals, it is necessary to manage customer care and sales in order to strategically place the company over competitors but also taking into account the customer needs acting as a bridge between the business activity and the external environment to ensures customer satisfaction.
 
+## Authors and acknowledgment
+Thank you all for the collaboration! Follow the authors on linkedin!
+
+- [**Olimpia Sannucci**](https://www.linkedin.com/in/olimpia-sannucci-526919229/)
+- [**Martina Crisafulli**](https://www.linkedin.com/in/martina-crisafulli-58a006209/)
+- [**Martina Manno**](https://www.linkedin.com/in/martina-manno-41a6a41a2/)
+- [**Hanna Carucci Viterbi**](https://www.linkedin.com/in/hanna-carucci-02958a1b8/)
 
